@@ -14,6 +14,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from "expo-router";
 import PayPalLoginButton from "@/components/LoginButton";
 import { LinearGradient } from 'expo-linear-gradient';
+import { setToken } from "@/constants/token_prop";
+import { URIS } from "@/constants/constants";
 
 const { width, height } = Dimensions.get('window');
 
@@ -26,6 +28,7 @@ export default function LoginScreen() {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
+  const [attemptedLogin, setAttemptedLogin] = useState(false);
 
   useEffect(() => {
     // Entrance animations
@@ -175,23 +178,47 @@ export default function LoginScreen() {
               
               <View style={styles.buttonContainer}>
                 <PayPalLoginButton
-                  onSuccess={async ({ code, state }) => {
-                    // 1) Verify we actually got here:
-                    console.log('PayPal onSuccess code=', code, 'state=', state);
+                    onSuccess={async ({ code, state }) => {
+                      setAttemptedLogin(false);
+                      // TODO
+                      // call /login
+                       try {
+                        const res = await fetch(`${URIS.BACKEND_URI}/login`, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            email: "mail@gmail.com", // mocked email, or use the `email` argument
+                          }),
+                        });
 
-                    // 2) TEMP: pretend we exchanged the code successfully.
-                    //    DO NOT use this in prod.
-                    await AsyncStorage.setItem('token', `DEV_TOKEN_${Date.now()}`);
+                        if (!res.ok) {
+                          throw new Error(`Request failed with status ${res.status}`);
+                        }
 
-                    // 3) Navigate into the app so you can continue building screens.
-                    router.replace('/');
-                  }}
-                  onCancel={() => setMsg("Login cancelled")}
-                  onError={(err) => {
-                    const m = err instanceof Error ? err.message : String(err);
-                    setMsg(m);
-                    Alert.alert("PayPal error", m);
-                  }}
+                        // Parse JSON response
+                        const data: { token?: string; [key: string]: any } = await res.json();
+
+                        if (data.token) {
+                          setToken(data.token);
+                          console.log("Token saved:", data.token);
+                        } else {
+                          console.warn("No token found in response:", data);
+                        }
+                      } catch (error) {
+                        console.error("Login failed:", error);
+                      }
+                      router.replace('/');
+                    }}
+                    onCancel={() => attemptedLogin && setMsg("Login cancelled")}
+                    onError={(err) => {
+                      if (attemptedLogin) {
+                        const m = err instanceof Error ? err.message : String(err);
+                        setMsg(m);
+                        Alert.alert("PayPal error", m);
+                      }
+                    }}
                 />
               </View>
 
