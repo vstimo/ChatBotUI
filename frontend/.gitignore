@@ -10,6 +10,8 @@ android/
 
 # dependencies
 node_modules/
+.vscode/
+frontend/node_modules
 
 # Expo
 .expo/
