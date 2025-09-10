@@ -629,7 +629,7 @@ export default function ChatScreen() {
     // Name the file with an extension your backend accepts (m4a or wav if you converted).
     form.append("file", blob, `recording-${Date.now()}.m4a`);
 
-    const res = await fetch("http://127.0.0.1:8000/stt", {
+    const res = await fetch(URIS.BACKEND_URI + "/stt", {
       method: "POST",
       // Don't set Content-Type manually; the browser adds the correct multipart boundary.
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -643,7 +643,7 @@ export default function ChatScreen() {
 
   // On native (iOS/Android): keep uploadAsync
   const result = await FileSystem.uploadAsync(
-    "http://127.0.0.1:8000/stt",
+    URIS.BACKEND_URI + "/stt",
     uri,
     {
       httpMethod: "POST",
