@@ -1,4 +1,4 @@
-// PayPalLoginButton.tsx// React Native component to start the "Log in with PayPal" OAuth flow using the
+// LoginButton.tsx// React Native component to start the "Log in with PayPal" OAuth flow using the
 // manual button guide you pasted. Uses an external browser + deep link return.
 //
 // ❗ Security note: Exchange the authorization code for tokens on YOUR BACKEND.
@@ -23,7 +23,7 @@ const SCOPES = [
 ];
 
 // Advanced parameter from the guide. If you prefer mini-browser (default), omit this param.
-const FULL_PAGE = false; // true opens full-page in same tab (browser), false = mini browser
+const FULL_PAGE = true; // true opens full-page in same tab (browser), false = mini browser
 
 const AUTH_BASE = USE_SANDBOX
   ? 'https://www.sandbox.paypal.com'
@@ -121,7 +121,8 @@ export default function PayPalLoginButton({
       const authUrl = await buildAuthUrl();
 
       if (Platform.OS === 'web') { 
-        window.open(authUrl, '_blank');
+        // window.open(authUrl, '_blank');
+        window.location.assign(authUrl);
       } else if (await InAppBrowser.isAvailable()) {
         const res = await InAppBrowser.openAuth(authUrl, REDIRECT_URI, {
           // iOS options
