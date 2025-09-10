@@ -4,7 +4,6 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -15,218 +14,17 @@ import {
   TextInput,
   View,
   Animated,
-  ScrollView,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Audio } from "expo-av";
 import * as FileSystem from "expo-file-system";
 import { Buffer } from "buffer";
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from "expo-router"; 
-import { URIS } from '@/constants/constants';
 
 type Role = "user" | "assistant" | "system";
 type Message = { id: string; role: Role; text: string; pending?: boolean };
-type NotificationType = "payment" | "security" | "update" | "reminder";
-type Notification = { 
-  id: string; 
-  type: NotificationType; 
-  title: string; 
-  message: string; 
-  timestamp: string;
-  isRead: boolean;
-};
 
 const MOCK_MODE = false;
-
-//for tts
-// track last blob: url so we can revoke it on web
-// const currentObjectUrlRef = useRef<string | null>(null);
-// const webBlobUrls = useRef<Set<string>>(new Set()); // track for cleanup on unmount
-
-const ttsCache = useRef<Record<string, string>>({});
-// ✅ track Blob URLs (web) so we can free them on unmount
-const webBlobUrls = useRef<Set<string>>(new Set());
-
-
-// Hardcoded notifications data
-const MOCK_NOTIFICATIONS: Notification[] = [
-  {
-    id: "1",
-    type: "payment",
-    title: "Payment Received",
-    message: "You received $125.00 from John Smith for dinner split",
-    timestamp: "2 min ago",
-    isRead: false,
-  },
-  {
-    id: "2",
-    type: "security",
-    title: "Security Alert",
-    message: "New login detected from iPhone 14 Pro in New York",
-    timestamp: "1 hour ago",
-    isRead: false,
-  },
-  {
-    id: "3",
-    type: "payment",
-    title: "Payment Sent",
-    message: "Successfully sent $50.00 to Sarah Johnson",
-    timestamp: "3 hours ago",
-    isRead: true,
-  },
-  {
-    id: "4",
-    type: "update",
-    title: "App Update Available",
-    message: "Version 2.1.0 includes new security features and bug fixes",
-    timestamp: "1 day ago",
-    isRead: true,
-  },
-  {
-    id: "5",
-    type: "reminder",
-    title: "Bill Reminder",
-    message: "Your Netflix subscription payment is due tomorrow",
-    timestamp: "2 days ago",
-    isRead: true,
-  },
-];
-
-// Notification Item Component
-const NotificationItem = ({ 
-  notification, 
-  onPress 
-}: {
-  notification: Notification;
-  onPress: (notification: Notification) => void;
-}) => {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-  }, []);
-
-  const getNotificationIcon = (type: NotificationType) => {
-    switch (type) {
-      case "payment":
-        return "card-outline";
-      case "security":
-        return "shield-checkmark-outline";
-      case "update":
-        return "download-outline";
-      case "reminder":
-        return "time-outline";
-      default:
-        return "notifications-outline";
-    }
-  };
-
-  const getNotificationColor = (type: NotificationType) => {
-    switch (type) {
-      case "payment":
-        return "#00D4FF";
-      case "security":
-        return "#FF6B9D";
-      case "update":
-        return "#4ECDC4";
-      case "reminder":
-        return "#FFE66D";
-      default:
-        return "#FFFFFF";
-    }
-  };
-
-  return (
-    <Animated.View style={[styles.notificationItem, { opacity: fadeAnim }]}>
-      <Pressable 
-        onPress={() => onPress(notification)}
-        style={[
-          styles.notificationContent,
-          !notification.isRead && styles.unreadNotification
-        ]}
-      >
-        <View style={styles.notificationHeader}>
-          <View 
-            style={[
-              styles.notificationIcon, 
-              { backgroundColor: getNotificationColor(notification.type) + '20' }
-            ]}
-          >
-            <Ionicons 
-              name={getNotificationIcon(notification.type) as any} 
-              size={18} 
-              color={getNotificationColor(notification.type)} 
-            />
-          </View>
-          <View style={styles.notificationTextContainer}>
-            <View style={styles.notificationTitleRow}>
-              <Text style={styles.notificationTitle} numberOfLines={1}>
-                {notification.title}
-              </Text>
-              {!notification.isRead && <View style={styles.unreadDot} />}
-            </View>
-            <Text style={styles.notificationTimestamp}>
-              {notification.timestamp}
-            </Text>
-          </View>
-        </View>
-        
-        <Text style={styles.notificationMessage} numberOfLines={2}>
-          {notification.message}
-        </Text>
-      </Pressable>
-    </Animated.View>
-  );
-};
-
-// Notifications Sidebar Component
-const NotificationsSidebar = ({ 
-  notifications, 
-  onNotificationPress 
-}: {
-  notifications: Notification[];
-  onNotificationPress: (notification: Notification) => void;
-}) => {
-  const unreadCount = notifications.filter(n => !n.isRead).length;
-
-  return (
-    <LinearGradient
-      colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
-      style={styles.notificationsSidebar}
-    >
-      <View style={styles.notificationsHeader}>
-        <View style={styles.notificationsHeaderContent}>
-          <Text style={styles.notificationsTitle}>Notifications</Text>
-          {unreadCount > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
-            </View>
-          )}
-        </View>
-        <Ionicons name="notifications-outline" size={20} color="rgba(255, 255, 255, 0.7)" />
-      </View>
-      
-      <ScrollView 
-        style={styles.notificationsList}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.notificationsContent}
-      >
-        {notifications.map((notification) => (
-          <NotificationItem
-            key={notification.id}
-            notification={notification}
-            onPress={onNotificationPress}
-          />
-        ))}
-      </ScrollView>
-    </LinearGradient>
-  );
-};
 
 // Separate component for message items to properly use hooks
 const MessageItem = ({ 
@@ -374,8 +172,6 @@ const MessageItem = ({
 export default function ChatScreen() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const router = useRouter();
-  const [loggingOut, setLoggingOut] = useState(false); 
   const [messages, setMessages] = useState<Message[]>(() => [
     {
       id: "welcome",
@@ -383,8 +179,6 @@ export default function ChatScreen() {
       text: "Hi! I'm your PayPal AI assistant. I can help you with payments, transactions, and account management. How can I assist you today? ✨",
     },
   ]);
-
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
 
   const listRef = useRef<FlatList>(null);
   const canSend = useMemo(() => input.trim().length > 0 && !sending, [input, sending]);
@@ -397,22 +191,10 @@ export default function ChatScreen() {
   const soundRef = useRef<Audio.Sound | null>(null);
   const ttsCache = useRef<Record<string, string>>({});
 
-  const [isRecording, setIsRecording] = useState(false);
-  const recordingRef = useRef<Audio.Recording | null>(null);
-
   // Animation refs for floating elements
   const floatAnim1 = useRef(new Animated.Value(0)).current;
   const floatAnim2 = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-  return () => {
-    if (Platform.OS === "web") {
-      for (const url of webBlobUrls.current) URL.revokeObjectURL(url);
-      webBlobUrls.current.clear();
-    }
-    };
-  }, []);
 
   useEffect(() => {
     // Subtle floating animations for background elements
@@ -474,31 +256,10 @@ export default function ChatScreen() {
     };
   }, []);
 
-  useEffect(() => {
-      return () => {
-        const rec = recordingRef.current;
-        if (rec) {
-          rec.stopAndUnloadAsync().catch(() => {});
-        }
-      };
-    }, []);
-
   const copyToClipboard = async (id: string, text: string) => {
     await Clipboard.setStringAsync(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const handleNotificationPress = (notification: Notification) => {
-    // Mark notification as read
-    setNotifications(prev => 
-      prev.map(n => 
-        n.id === notification.id ? { ...n, isRead: true } : n
-      )
-    );
-    
-    // You can add additional logic here, like navigating to a specific screen
-    console.log('Notification pressed:', notification);
   };
 
   useEffect(() => {
@@ -513,80 +274,24 @@ export default function ChatScreen() {
     });
 
   const sendToBackend = async (userText: string) => {
-    const token = URIS.TOKEN;
-    console.log("[CHAT] Sending to backend…", { len: userText.length, messages: messages.length, token: token });
-    const res = await fetch(`${URIS.BACKEND_URI}/chat`, {
+    const token = await AsyncStorage.getItem("token");
+    const res = await fetch("http://127.0.0.1:8000/chat", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify([
-        ...messages.map(({ role, text }) => ({ role, content: text })),
-        { role: "user", content: userText },
-      ]),
+      body: JSON.stringify({
+        messages: [
+          ...messages.map(({ role, text }) => ({ role, content: text })),
+          { role: "user", content: userText },
+        ],
+      }),
     });
-
-  let data: any;
-  try {
-    // Try to parse JSON even if status is not ok
-    data = await res.json();
-  } catch (err) {
-    console.error("Failed to parse error response:", err);
-    throw new Error(`HTTP ${res.status} (no JSON body)`);
-  }
-
-  if (!res.ok) {
-    console.error("Backend error payload:", data);
-    throw new Error(`HTTP ${res.status}: ${JSON.stringify(data)}`);
-  }
-
-  return (data.reply as string) ?? "…";
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return (data.reply as string) ?? "…";
   };
-
-  const askMicPermission = useCallback(async () => {
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== "granted") throw new Error("Microphone permission denied");
-    }, []);
-
-    const startRecording = useCallback(async () => {
-      await askMicPermission();
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        //interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
-        //interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
-        playThroughEarpieceAndroid: false,
-        staysActiveInBackground: false,
-      });
-
-      const recording = new Audio.Recording();
-      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      await recording.startAsync();
-
-      recordingRef.current = recording;
-      setIsRecording(true);
-   }, [askMicPermission]);
-
-  const stopRecording = useCallback(async () => {
-      const rec = recordingRef.current;
-      if (!rec) return null;
-
-      try {
-        await rec.stopAndUnloadAsync();
-      } catch {}
-
-      const uri = rec.getURI();
-      recordingRef.current = null;
-      setIsRecording(false);
-
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-
-      return uri;
-  }, []);
-
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim()) return;
@@ -630,72 +335,11 @@ export default function ChatScreen() {
     await sendMessage(text);
   }, [input, sendMessage]);
 
-  const uploadForTranscription = useCallback(async (uri: string) => {
-  const token = URIS.TOKEN
-  if (Platform.OS === "web") {
-    // On web: use fetch + FormData with a Blob
-    // NOTE: If your recording comes from a web-only recorder, you'll already have a Blob.
-    // If `uri` is a blob/data URL, fetch it back into a Blob:
-    const resp = await fetch(uri);
-    const blob = await resp.blob();
-
-    const form = new FormData();
-    // Name the file with an extension your backend accepts (m4a or wav if you converted).
-    form.append("file", blob, `recording-${Date.now()}.m4a`);
-
-    const res = await fetch(URIS.BACKEND_URI + "/stt", {
-      method: "POST",
-      // Don't set Content-Type manually; the browser adds the correct multipart boundary.
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      body: form,
-    });
-
-    if (!res.ok) throw new Error(`STT HTTP ${res.status}`);
-    const data = await res.json();
-    return (data.text as string) ?? "";
-  }
-
-  // On native (iOS/Android): keep uploadAsync
-  const result = await FileSystem.uploadAsync(
-    URIS.BACKEND_URI + "/stt",
-    uri,
-    {
-      httpMethod: "POST",
-      uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-      fieldName: "file",
-      mimeType: "audio/m4a", // or "audio/wav" if you transcoded
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    }
-  );
-
-  if (result.status !== 200) throw new Error(`STT HTTP ${result.status}: ${result.body}`);
-  const data = JSON.parse(result.body);
-  return (data.text as string) ?? "";
-}, []);
-
-
   const onSendWithText = useCallback(async (text: string) => {
-        if (!text.trim()) return;
-        setInput("");
-        await sendMessage(text);
-      }, [sendMessage]);
-      const onMicPress = useCallback(async () => {
-      try {
-        if (isRecording) {
-          const uri = await stopRecording();
-          if (!uri) return;
-          const text = await uploadForTranscription(uri);
-          setInput((prev) => (prev.length ? `${prev} ${text}` : text));
-        } else {
-          await startRecording();
-        }
-      } catch (e) {
-        console.warn("Mic error:", e);
-      }
-    }, [isRecording, startRecording, stopRecording, uploadForTranscription]);
-
-
-
+    if (!text.trim()) return;
+    setInput("");
+    await sendMessage(text);
+  }, [sendMessage]);
 
   const handleChangeText = (t: string) => {
     if (t.endsWith("\n")) {
@@ -706,101 +350,54 @@ export default function ChatScreen() {
     }
   };
 
-const isStartingRef = useRef(false);
-const speakingIdRef = useRef<string | null>(null);
-const stopInProgressRef = useRef(false);
-const lastStopAtRef = useRef(0);
-
-
-// simple click guard to avoid double-fires on web
-const lastPressTsRef = useRef(0);
-const lastPressIdRef = useRef<string | null>(null);
-
-// keep ref in sync with state
-useEffect(() => {
-  speakingIdRef.current = speakingId;
-}, [speakingId]);
-
   const stopSpeaking = useCallback(async () => {
-  if (stopInProgressRef.current) return;
-  stopInProgressRef.current = true;
-
-  const s = soundRef.current;
-  soundRef.current = null;
-
-  try {
-    if (s) {
-      s.setOnPlaybackStatusUpdate(null);
-      if (Platform.OS === "web") {
-        try { await s.pauseAsync(); } catch {}
-        try { await s.setPositionAsync(0); } catch {}
-      } else {
-        try { await s.stopAsync(); } catch {}
+    try {
+      if (soundRef.current) {
+        console.log("[TTS] Stopping playback");
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
       }
-      try { await s.unloadAsync(); } catch {}
+    } finally {
+      setSpeakingId(null);
     }
-  } finally {
-    // clear both state and ref so toggle works reliably
-    speakingIdRef.current = null;
-    setSpeakingId(null);
-    lastStopAtRef.current = Date.now();
-    stopInProgressRef.current = false;
-  }
-}, []);
+  }, []);
 
+  const playLocalFile = useCallback(async (fileUri: string) => {
+    await stopSpeaking();
+    const { sound } = await Audio.Sound.createAsync({ uri: fileUri }, { shouldPlay: true });
+    soundRef.current = sound;
+    sound.setOnPlaybackStatusUpdate((status) => {
+      if (!status.isLoaded) return;
+      if ((status as any).didJustFinish) {
+        console.log("[TTS] Finished");
+        stopSpeaking();
+      }
+    });
+  }, [stopSpeaking]);
 
-// -------------------- PLAY --------------------
-const playLocalFile = useCallback(async (fileUri: string) => {
-  // ❌ no stopSpeaking here — it resets speakingId during start
+  const fetchTtsFile = useCallback(async (id: string, text: string) => {
+    const cached = ttsCache.current[id];
+    if (cached) return cached;
 
-  const { sound } = await Audio.Sound.createAsync(
-    { uri: fileUri },
-    { shouldPlay: true, progressUpdateIntervalMillis: 250 }
-  );
+    const token = await AsyncStorage.getItem("token");
+    console.log("[TTS] Fetching MP3 from backend…", { len: text.length });
 
-  soundRef.current = sound;
+    const res = await fetch("http://127.0.0.1:8000/tts", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        text,
+        filename: null,
+        download: false,
+      }),
+    });
 
-  sound.setOnPlaybackStatusUpdate((status) => {
-    if (!status.isLoaded) return;
-    if ((status as any).didJustFinish) {
-      console.log("[TTS] Finished");
-      // fire-and-forget
-      stopSpeaking();
-    }
-  });
-}, [stopSpeaking]);
+    if (!res.ok) throw new Error(`TTS HTTP ${res.status}`);
 
-
-// -------------------- FETCH --------------------
-const fetchTtsFile = useCallback(async (id: string, text: string) => {
-  const cached = ttsCache.current[id];
-  if (cached) return cached;
-
-  const token = URIS.TOKEN;
-  console.log("[TTS] Fetching MP3 from backend…", { len: text.length });
-
-  const res = await fetch(`${URIS.BACKEND_URI}/tts`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ text, filename: null, download: false }),
-  });
-
-  if (!res.ok) throw new Error(`TTS HTTP ${res.status}`);
-
-  if (Platform.OS === "web") {
-    // Force correct MIME on web and create a fresh blob URL
-    const ab = await res.arrayBuffer();
-    const blob = new Blob([ab], { type: "audio/mpeg" });
-    const objectUrl = URL.createObjectURL(blob);
-    ttsCache.current[id] = objectUrl;
-    webBlobUrls.current.add(objectUrl); // track for cleanup later
-    console.log("[TTS] Created blob URL:", objectUrl);
-    return objectUrl;
-  } else {
-    // Native: save to cache as base64
     const arrayBuffer = await res.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString("base64");
 
@@ -812,70 +409,33 @@ const fetchTtsFile = useCallback(async (id: string, text: string) => {
     console.log("[TTS] Saved MP3 to cache:", fileUri);
     ttsCache.current[id] = fileUri;
     return fileUri;
-  }
-}, []);
+  }, []);
 
-// -------------------- SPEAK --------------------
-// add this ref somewhere top-level in the component
+  const speakMessage = useCallback(async (id: string, text: string) => {
+    try {
+      if (speakingId === id) {
+        await stopSpeaking();
+        return;
+      }
 
+      if (MOCK_MODE) {
+        console.log("[TTS MOCK] button pressed", {
+          id,
+          preview: text.slice(0, 80),
+          length: text.length,
+        });
+        return;
+      }
 
-
-
-const speakMessage = useCallback(async (id: string, text: string) => {
-  console.log("[TTS] handler", { id, speakingIdRef: speakingIdRef.current, stopInProgress: stopInProgressRef.current });
-
-  const now = Date.now();
-
-  if (stopInProgressRef.current) return;
-  if (now - lastStopAtRef.current < 400) return;
-
-  // debounce RN Web double-fires
-  if (lastPressIdRef.current === id && now - lastPressTsRef.current < 350) return;
-  lastPressIdRef.current = id;
-  lastPressTsRef.current = now;
-
-  if (isStartingRef.current) return;
-
-  // Toggle: same id -> stop and exit
-  if (speakingIdRef.current === id) {
-    await stopSpeaking();
-    return;
-  }
-
-  isStartingRef.current = true;
-  try {
-    if (MOCK_MODE) {
-      console.log("[TTS MOCK] button pressed", {
-        id,
-        preview: text.slice(0, 80),
-        length: text.length,
-      });
-      return;
+      const fileUri = await fetchTtsFile(id, text);
+      setSpeakingId(id);
+      await playLocalFile(fileUri);
+      console.log("[TTS] Playing:", fileUri);
+    } catch (e) {
+      console.warn("TTS error:", e);
+      setSpeakingId(null);
     }
-
-    // Switching to a different id? stop current first (not in playLocalFile)
-    if (speakingIdRef.current && speakingIdRef.current !== id) {
-      await stopSpeaking();
-      if (Date.now() - lastStopAtRef.current < 200) return;
-    }
-
-    // Mark active id BEFORE awaits
-    speakingIdRef.current = id;
-    setSpeakingId(id);
-
-    const fileUri = await fetchTtsFile(id, text);
-    await playLocalFile(fileUri);
-    console.log("[TTS] Playing:", fileUri);
-  } catch (e) {
-    console.warn("TTS error:", e);
-    speakingIdRef.current = null;
-    setSpeakingId(null);
-  } finally {
-    isStartingRef.current = false;
-  }
-}, [MOCK_MODE, stopSpeaking, fetchTtsFile, playLocalFile]);
-
-
+  }, [MOCK_MODE, speakingId, stopSpeaking, fetchTtsFile, playLocalFile]);
 
   const renderItem = ({ item }: { item: Message }) => (
     <MessageItem 
@@ -887,41 +447,6 @@ const speakMessage = useCallback(async (id: string, text: string) => {
       pulseAnim={pulseAnim}
     />
   );
-
-  const logout = useCallback(() => {
-  Alert.alert(
-    "Log out",
-    "Are you sure you want to log out?",
-    [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Log out",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setLoggingOut(true);
-            await stopSpeaking();
-            await AsyncStorage.removeItem("token");
-            setMessages([
-              {
-                id: "welcome",
-                role: "assistant",
-                text:
-                  "Hi! I'm your PayPal AI assistant. I can help you with payments, transactions, and account management. How can I assist you today? ✨",
-              },
-            ]);
-
-            // ⬇️ Go to /login (cannot go back to tabs)
-            router.replace("/login");
-          } finally {
-            setLoggingOut(false);
-          }
-        },
-      },
-    ],
-    { cancelable: true }
-  );
-}, [router, stopSpeaking, setMessages]);
 
   return (
     <LinearGradient
@@ -949,65 +474,39 @@ const speakMessage = useCallback(async (id: string, text: string) => {
           />
         </View>
 
-        <View style={styles.mainContainer}>
-          {/* Chat Section */}
-          <KeyboardAvoidingView
-            style={styles.chatContainer}
-            behavior={Platform.select({ ios: "padding", android: undefined, default: undefined })}
-            keyboardVerticalOffset={Platform.select({ ios: 64, default: 0 })}
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.select({ ios: "padding", android: undefined, default: undefined })}
+          keyboardVerticalOffset={Platform.select({ ios: 64, default: 0 })}
+        >
+          {/* Header */}
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']}
+            style={styles.header}
           >
-            {/* Header */}
-            <LinearGradient
-              colors={['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']}
-              style={styles.header}
-            >
-            
-              <View style={styles.headerRow}>   {/* NEW */}
-                <View style={styles.headerContent}>
-                  <View style={styles.headerIcon}>
-                    <Text style={styles.headerEmoji}>🤖</Text>
-                  </View>
-                  <View style={styles.headerTextContainer}>
-                    <Text style={styles.headerTitle}>PayPal AI Assistant</Text>
-                    <Text style={styles.headerSubtitle}>Online • Ready to help</Text>
-                  </View>
+            <View style={styles.headerContent}>
+              <View style={styles.headerIcon}>
+                <Text style={styles.headerEmoji}>🤖</Text>
               </View>
-
-                <Pressable
-                  onPress={logout}
-                  disabled={loggingOut}
-                  hitSlop={10}
-                  style={({ pressed }) => [
-                    styles.logoutBtn,
-                    loggingOut && { opacity: 0.6 },
-                    pressed && { transform: [{ scale: 0.98 }] },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Log out"
-                >
-                  {loggingOut ? (
-                    <ActivityIndicator size="small" color="#0A0A2E" />
-                  ) : (
-                    <View style={styles.logoutInner}>
-                      <Ionicons name="log-out-outline" size={16} color="#0A0A2E" />
-                      <Text style={styles.logoutText}>Log out</Text>
-                    </View>
-                  )}
-                </Pressable>
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.headerTitle}>PayPal AI Assistant</Text>
+                <Text style={styles.headerSubtitle}>Online • Ready to help</Text>
               </View>
-            </LinearGradient>
+            </View>
+          </LinearGradient>
 
-            <FlatList
-              ref={listRef}
-              data={messages}
-              keyExtractor={(m) => m.id}
-              renderItem={renderItem}
-              contentContainerStyle={styles.listContent}
-              onContentSizeChange={scrollToEnd}
-              onLayout={scrollToEnd}
-              showsVerticalScrollIndicator={false}
-            />
-            <LinearGradient
+          <FlatList
+            ref={listRef}
+            data={messages}
+            keyExtractor={(m) => m.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.listContent}
+            onContentSizeChange={scrollToEnd}
+            onLayout={scrollToEnd}
+            showsVerticalScrollIndicator={false}
+          />
+
+          <LinearGradient
             colors={['rgba(255, 255, 255, 0.08)', 'rgba(255, 255, 255, 0.04)']}
             style={styles.inputBar}
           >
@@ -1021,13 +520,6 @@ const speakMessage = useCallback(async (id: string, text: string) => {
                 style={styles.input}
                 blurOnSubmit={false}
               />
-
-              <Pressable
-                onPress={onMicPress}
-                style={[styles.micBtn, isRecording && styles.micBtnActive]}
-              >
-                <Ionicons name={isRecording ? "stop" : "mic"} size={20} color="#0A0A2E" />
-              </Pressable>
               
               <Pressable
                 onPress={onSend}
@@ -1043,17 +535,9 @@ const speakMessage = useCallback(async (id: string, text: string) => {
             </View>
           </LinearGradient>
         </KeyboardAvoidingView>
-
-          {/* Notifications Sidebar */}
-          <NotificationsSidebar 
-            notifications={notifications}
-            onNotificationPress={handleNotificationPress}
-          />
-        </View>
       </SafeAreaView>
     </LinearGradient>
   );
-  
 }
 
 const styles = StyleSheet.create({
@@ -1090,12 +574,8 @@ const styles = StyleSheet.create({
     bottom: '30%',
     left: '10%',
   },
-  mainContainer: {
+  container: { 
     flex: 1,
-    flexDirection: 'row',
-  },
-  chatContainer: { 
-    flex: 3,
   },
   header: {
     paddingVertical: 16,
@@ -1103,38 +583,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
-  headerRow: {                             // NEW
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
   headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  logoutBtn: {                             // NEW
-    paddingHorizontal: 12,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#00D4FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#00D4FF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  logoutInner: {                           // NEW
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  logoutText: {                            // NEW
-    color: '#0A0A2E',
-    fontWeight: '700',
-    fontSize: 13,
-    letterSpacing: -0.2,
   },
   headerIcon: {
     width: 44,
@@ -1289,23 +740,6 @@ const styles = StyleSheet.create({
     opacity: 0.5,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
-  micBtn: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: '#FFFFFF',
-      justifyContent: 'center',
-      alignItems: 'center',
-      shadowColor: '#FFFFFF',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 4,
-  },
-  micBtnActive: {
-      backgroundColor: '#FF6B9D',
-      shadowColor: '#FF6B9D',
-  },
   actions: {
     flexDirection: "row",
     marginTop: 8,
@@ -1316,113 +750,5 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  
-  // Notifications Sidebar Styles
-  notificationsSidebar: {
-    flex: 1,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: 'rgba(255, 255, 255, 0.1)',
-    paddingVertical: 16,
-  },
-  notificationsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  notificationsHeaderContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  notificationsTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '600',
-    letterSpacing: -0.3,
-  },
-  unreadBadge: {
-    backgroundColor: '#FF6B9D',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    minWidth: 20,
-    alignItems: 'center',
-  },
-  unreadBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  notificationsList: {
-    flex: 1,
-    paddingTop: 8,
-  },
-  notificationsContent: {
-    paddingHorizontal: 12,
-    paddingBottom: 20,
-  },
-  notificationItem: {
-    marginBottom: 8,
-  },
-  notificationContent: {
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  unreadNotification: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(0, 212, 255, 0.3)',
-  },
-  notificationHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  notificationIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  notificationTextContainer: {
-    flex: 1,
-  },
-  notificationTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 2,
-  },
-  notificationTitle: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#00D4FF',
-    marginLeft: 4,
-  },
-  notificationTimestamp: {
-    color: 'rgba(255, 255, 255, 0.6)',
-    fontSize: 11,
-    fontWeight: '400',
-  },
-  notificationMessage: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 13,
-    lineHeight: 18,
   },
 });

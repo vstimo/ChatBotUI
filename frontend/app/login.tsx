@@ -7,9 +7,9 @@ import {
   StyleSheet, 
   Alert, 
   Dimensions, 
-  Animated 
+  Animated,
+  StatusBar 
 } from "react-native";
-import { StatusBar } from "expo-status-bar";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from "expo-router";
 import PayPalLoginButton from "@/components/LoginButton";
@@ -80,8 +80,7 @@ export default function LoginScreen() {
 
   return (
     <>
-      {/* <StatusBar barStyle="light-content" backgroundColor="#0A0A2E" /> */}
-      <StatusBar style="light" />
+      <StatusBar barStyle="light-content" backgroundColor="#0A0A2E" />
       <LinearGradient
         colors={['#0A0A2E', '#16213E', '#0E4B99', '#2E86AB']}
         style={styles.gradient}
@@ -177,6 +176,9 @@ export default function LoginScreen() {
               
               <View style={styles.buttonContainer}>
                 <PayPalLoginButton
+                    // Add a prop your button can call when it actually starts the flow,
+                    // or wrap its onPress if it exposes one.
+                    onStart={() => setAttemptedLogin(true)}
                     onSuccess={async ({ code, state }) => {
                       setAttemptedLogin(false);
                       await AsyncStorage.setItem('token', `DEV_TOKEN_${Date.now()}`);
