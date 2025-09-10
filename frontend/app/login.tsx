@@ -7,9 +7,9 @@ import {
   StyleSheet, 
   Alert, 
   Dimensions, 
-  Animated,
-  StatusBar 
+  Animated
 } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from "expo-router";
 import PayPalLoginButton from "@/components/LoginButton";
@@ -82,7 +82,8 @@ export default function LoginScreen() {
 
   return (
     <>
-      <StatusBar barStyle="light-content" backgroundColor="#0A0A2E" />
+      {/* /* <StatusBar barStyle="light-content" backgroundColor="#0A0A2E" />*/ }
+      <StatusBar style="light" /* barStyle prop is "style" in expo-status-bar */ />
       <LinearGradient
         colors={['#0A0A2E', '#16213E', '#0E4B99', '#2E86AB']}
         style={styles.gradient}
