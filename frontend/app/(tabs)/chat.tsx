@@ -41,8 +41,13 @@ const MOCK_MODE = false;
 
 //for tts
 // track last blob: url so we can revoke it on web
-const currentObjectUrlRef = useRef<string | null>(null);
-const webBlobUrls = useRef<Set<string>>(new Set()); // track for cleanup on unmount
+// const currentObjectUrlRef = useRef<string | null>(null);
+// const webBlobUrls = useRef<Set<string>>(new Set()); // track for cleanup on unmount
+
+const ttsCache = useRef<Record<string, string>>({});
+// ✅ track Blob URLs (web) so we can free them on unmount
+const webBlobUrls = useRef<Set<string>>(new Set());
+
 
 // Hardcoded notifications data
 const MOCK_NOTIFICATIONS: Notification[] = [
@@ -401,6 +406,15 @@ export default function ChatScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+  return () => {
+    if (Platform.OS === "web") {
+      for (const url of webBlobUrls.current) URL.revokeObjectURL(url);
+      webBlobUrls.current.clear();
+    }
+    };
+  }, []);
+
+  useEffect(() => {
     // Subtle floating animations for background elements
     const floatAnimation1 = Animated.loop(
       Animated.sequence([
@@ -664,7 +678,8 @@ export default function ChatScreen() {
         if (!text.trim()) return;
         setInput("");
         await sendMessage(text);
-      }, [sendMessage]);const onMicPress = useCallback(async () => {
+      }, [sendMessage]);
+      const onMicPress = useCallback(async () => {
       try {
         if (isRecording) {
           const uri = await stopRecording();
